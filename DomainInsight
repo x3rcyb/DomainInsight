@@ -1,0 +1,75 @@
+import socket
+import whois
+import dns.resolver
+import ssl
+import datetime
+
+def get_ip_address(domain):
+    try:
+        ip_address = socket.gethostbyname(domain)
+        return ip_address
+    except socket.gaierror:
+        return None
+
+def get_dns_info(domain):
+    try:
+        answers = dns.resolver.resolve(domain, 'A')
+        dns_info = {
+            'domain': domain,
+            'ip_address': [rdata.address for rdata in answers]
+        }
+        return dns_info
+    except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
+        return None
+
+def get_whois_info(domain):
+    try:
+        whois_info = whois.whois(domain)
+        return whois_info
+    except whois.parser.PywhoisError:
+        return None
+
+def get_ssl_info(domain):
+    try:
+        context = ssl.create_default_context()
+        with socket.create_connection((domain, 443)) as sock:
+            with context.wrap_socket(sock, server_hostname=domain) as ssock:
+                cert = ssock.getpeercert()
+                ssl_info = {
+                    'subject': dict(x[0] for x in cert['subject']),
+                    'issuer': dict(x[0] for x in cert['issuer']),
+                    'expiration_date': datetime.datetime.strptime(cert['notAfter'], '%b %d %H:%M:%S %Y %Z')
+                }
+                return ssl_info
+    except (socket.gaierror, ssl.SSLError, KeyError):
+        return None
+
+def main():
+    target = input("Enter a domain or IP address: ").strip()
+
+    ip_address = get_ip_address(target)
+    if ip_address:
+        print(f'IP Address: {ip_address}')
+    else:
+        print('Invalid domain or IP address.')
+
+    dns_info = get_dns_info(target)
+    if dns_info:
+        print(f'DNS Info: {dns_info}')
+    else:
+        print('DNS information not found.')
+
+    whois_info = get_whois_info(target)
+    if whois_info:
+        print(f'WHOIS Info:\n{whois_info}')
+    else:
+        print('WHOIS information not found.')
+
+    ssl_info = get_ssl_info(target)
+    if ssl_info:
+        print(f'SSL Info:\nSubject: {ssl_info["subject"]}\nIssuer: {ssl_info["issuer"]}\nExpiration Date: {ssl_info["expiration_date"]}')
+    else:
+        print('SSL information not found.')
+
+if __name__ == "__main__":
+    main()
