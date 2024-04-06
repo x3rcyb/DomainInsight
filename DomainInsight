@@ -3,6 +3,8 @@ import whois
 import dns.resolver
 import ssl
 import datetime
+import nmap
+import concurrent.futures
 
 def get_ip_address(domain):
     try:
@@ -44,6 +46,14 @@ def get_ssl_info(domain):
     except (socket.gaierror, ssl.SSLError, KeyError):
         return None
 
+def nmap_scan(ip_address):
+    try:
+        nm = nmap.PortScanner()
+        nm.scan(ip_address, arguments='-A -T4')  # Perform aggressive scan
+        return nm[ip_address]
+    except nmap.NmapError:
+        return None
+
 def main():
     target = input("Enter a domain or IP address: ").strip()
 
@@ -52,6 +62,7 @@ def main():
         print(f'IP Address: {ip_address}')
     else:
         print('Invalid domain or IP address.')
+        return
 
     dns_info = get_dns_info(target)
     if dns_info:
@@ -70,6 +81,23 @@ def main():
         print(f'SSL Info:\nSubject: {ssl_info["subject"]}\nIssuer: {ssl_info["issuer"]}\nExpiration Date: {ssl_info["expiration_date"]}')
     else:
         print('SSL information not found.')
+
+    # Perform Nmap scan using multithreading
+    print(f'Starting Nmap scan for {ip_address}...')
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(nmap_scan, ip_address)
+        nmap_results = future.result()
+
+    if nmap_results:
+        print(f'Nmap Scan Results for {ip_address}:')
+        for port in nmap_results['tcp'].keys():
+            service = nmap_results['tcp'][port]['name']
+            product = nmap_results['tcp'][port]['product']
+            version = nmap_results['tcp'][port]['version']
+            os = nmap_results['osmatch'][0]['name'] if 'osmatch' in nmap_results else 'Unknown OS'
+            print(f'Port {port}: {service} ({product} {version}), OS: {os}')
+    else:
+        print(f'Nmap scan failed for {ip_address}.')
 
 if __name__ == "__main__":
     main()
